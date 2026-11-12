@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CMRL Park • Live</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffffff">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.8; } 100% { transform: scale(1.8); opacity: 0; } }
+    .live-dot::before { content: ''; position: absolute; inset: -3px; border-radius: 9999px; background: currentColor; animation: pulse-ring 1.8s infinite; }
+  </style>
+</head>
+<body class="bg-[#F2F4F7] text-slate-900 min-h-screen pb-24 selection:bg-blue-600 selection:text-white">
+
+  <!-- Top App Bar -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
+    <div class="max-w-lg mx-auto px-4 pt-3.5 pb-3">
+      <!-- Brand + Live Pill + GPS -->
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
+            M
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-[15px] font-extrabold tracking-tight text-slate-900">MetroPark</h1>
+              <span id="liveBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <span class="relative w-1.5 h-1.5 rounded-full bg-amber-500 live-dot"></span>
+                <span id="liveText">SYNCING</span>
+              </span>
+            </div>
+            <p id="subStatus" class="text-[11px] text-slate-500 font-medium mt-0.5">Chennai Metro Rail Live</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <button onclick="requestGPS()" id="gpsBtn" class="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/80 active:scale-95 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all">
+            <svg class="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v2m0 16v2M2 12h2m16 0h2m-4.93-5.07l-1.41 1.41M8.34 15.66l-1.41 1.41m0-10.14l1.41 1.41m7.32 7.32l1.41 1.41M12 8a4 4 0 100 8 4 4 0 000-8z"/></svg>
+            <span id="gpsLabel">Locate</span>
+          </button>
+          <button onclick="loadData()" class="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 active:scale-95 text-slate-700 flex items-center justify-center transition-all" aria-label="Refresh">
+            <svg id="spinIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search Input -->
+      <div class="relative mb-2.5">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/></svg>
+        <input id="searchBox" type="text" oninput="render()" placeholder="Find station or gate (e.g. Shenoy, Central, Guindy)..."
+          class="w-full h-10 bg-slate-100/90 focus:bg-white border border-transparent focus:border-blue-500 rounded-xl pl-10 pr-8 text-xs font-semibold text-slate-900 placeholder-slate-400 outline-none transition-all">
+        <button id="clearBtn" onclick="clearSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-300/70 text-slate-600 text-[10px] font-bold flex items-center justify-center">✕</button>
+      </div>
+
+      <!-- Corridor Filter Pills -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+        <button onclick="setFilter('ALL')" data-filter="ALL" class="filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-900 text-white shrink-0 transition-all">All Stations</button>
+        <button onclick="setFilter('OPEN')" data-filter="OPEN" class="filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 shrink-0 transition-all">● Spots Available</button>
+        <button onclick="setFilter('BLUE')" data-filter="BLUE" class="filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-blue-700 shrink-0 transition-all">Blue Line</button>
+        <button onclick="setFilter('GREEN')" data-filter="GREEN" class="filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-emerald-700 shrink-0 transition-all">Green Line</button>
+        <button onclick="setFilter('PINNED')" data-filter="PINNED" class="filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-amber-700 shrink-0 transition-all">★ Pinned</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Error / Diagnostic Banner (Only shown if something goes wrong) -->
+  <div id="errorCard" class="hidden max-w-lg mx-auto px-4 pt-3">
+    <div class="bg-rose-50 border border-rose-200 rounded-2xl p-3 text-xs text-rose-800">
+      <div class="font-bold flex items-center justify-between">
+        <span>Connection Notice</span>
+        <button onclick="document.getElementById('errorCard').classList.add('hidden')" class="text-rose-500 font-bold">✕</button>
+      </div>
+      <p id="errorMsg" class="text-[11px] mt-1 leading-relaxed"></p>
+    </div>
+  </div>
+
+  <!-- Main Feed -->
+  <main class="max-w-lg mx-auto px-4 pt-3">
+    <!-- Quick Pulse Hero Summary -->
+    <div id="heroStats" class="hidden grid grid-cols-3 gap-2 mb-3">
+      <div class="bg-white rounded-2xl p-2.5 border border-slate-200/70 shadow-2xs">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Open Stations</div>
+        <div id="heroOpen" class="mono text-base font-extrabold text-slate-900 mt-0.5">--</div>
+      </div>
+      <div class="bg-white rounded-2xl p-2.5 border border-slate-200/70 shadow-2xs">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Free Slots</div>
+        <div id="heroSlots" class="mono text-base font-extrabold text-emerald-600 mt-0.5">--</div>
+      </div>
+      <div class="bg-white rounded-2xl p-2.5 border border-slate-200/70 shadow-2xs">
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Anchor</div>
+        <div id="heroAnchor" class="text-[11px] font-extrabold text-blue-600 truncate mt-1">Route Order</div>
+      </div>
+    </div>
+
+    <!-- Station Cards -->
+    <div id="feed" class="flex flex-col gap-3">
+      <!-- Skeleton loaders on initial boot -->
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/70 animate-pulse h-28"></div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/70 animate-pulse h-28"></div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/70 animate-pulse h-28"></div>
+    </div>
+  </main>
+
+  <!-- Floating Bottom Thumb Dock (Vehicle Switcher) -->
+  <div class="fixed bottom-4 inset-x-0 z-40 px-4 pointer-events-none">
+    <div class="max-w-xs mx-auto bg-slate-900/95 backdrop-blur-md p-1.5 rounded-2xl shadow-xl shadow-slate-900/25 border border-slate-700/60 grid grid-cols-2 pointer-events-auto">
+      <button id="dockBike" onclick="setVehicle('two')" class="py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 bg-white text-slate-900 shadow transition-all">
+        <span>🏍️</span> Two-Wheeler
+      </button>
+      <button id="dockCar" onclick="setVehicle('four')" class="py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-all">
+        <span>🚗</span> Four-Wheeler
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "https://commuters-dataapi.chennaimetrorail.org/api/ParkingArea/getParkingAreaAvailability";
+
+    // Safe Storage Wrapper (prevents iOS Safari Private Browsing / file:// crashes)
+    const Store = {
+      mem: {},
+      get(key, fallback) {
+        try {
+          const val = window.localStorage.getItem(key);
+          return val ? JSON.parse(val) : fallback;
+        } catch (e) {
+          return this.mem[key] !== undefined ? this.mem[key] : fallback;
+        }
+      },
+      set(key, val) {
+        this.mem[key] = val;
+        try { window.localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+      }
+    };
+
+    // Station Metadata: [Lat, Lon, Line ('BLUE'|'GREEN'|'INTERCHANGE'), RouteOrderIndex]
+    const STATION_META = {
+      "wimco nagar depot": [13.1764, 80.3015, "BLUE", 1],
+      "wimco nagar": [13.1678, 80.3012, "BLUE", 2],
+      "thiruvotriyur": [13.1594, 80.3005, "BLUE", 3],
+      "thiruvotriyur theradi": [13.1501, 80.3002, "BLUE", 4],
+      "kaladipet": [13.1415, 80.2991, "BLUE", 5],
+      "tollgate": [13.1311, 80.2954, "BLUE", 6],
+      "new washermanpet": [13.1205, 80.2905, "BLUE", 7],
+      "tondiarpet": [13.1147, 80.2863, "BLUE", 8],
+      "thiagaraya college": [13.1065, 80.2825, "BLUE", 9],
+      "washermanpet": [13.1028, 80.2801, "BLUE", 10],
+      "mannadi": [13.0955, 80.2882, "BLUE", 11],
+      "high court": [13.0878, 80.2875, "BLUE", 12],
+      "central": [13.0822, 80.2755, "INTERCHANGE", 13],
+      "puratchi thalaivar dr. m.g. ramachandran central": [13.0822, 80.2755, "INTERCHANGE", 13],
+      "government estate": [13.0694, 80.2725, "BLUE", 14],
+      "lic": [13.0631, 80.2647, "BLUE", 15],
+      "thousand lights": [13.0583, 80.2547, "BLUE", 16],
+      "ag-dms": [13.0450, 80.2478, "BLUE", 17],
+      "teynampet": [13.0392, 80.2452, "BLUE", 18],
+      "nandanam": [13.0315, 80.2411, "BLUE", 19],
+      "saidapet": [13.0235, 80.2281, "BLUE", 20],
+      "little mount": [13.0163, 80.2227, "BLUE", 21],
+      "guindy": [13.0084, 80.2131, "BLUE", 22],
+      "arignar anna alandur": [13.0039, 80.2014, "INTERCHANGE", 23],
+      "alandur": [13.0039, 80.2014, "INTERCHANGE", 23],
+      "nanganallur road": [12.9922, 80.1939, "BLUE", 24],
+      "meenambakkam": [12.9877, 80.1764, "BLUE", 25],
+      "chennai airport": [12.9806, 80.1638, "BLUE", 26],
+      "egmore": [13.0785, 80.2611, "GREEN", 30],
+      "nehru park": [13.0789, 80.2514, "GREEN", 31],
+      "kilpauk": [13.0784, 80.2431, "GREEN", 32],
+      "pachaiyappa": [13.0758, 80.2325, "GREEN", 33],
+      "shenoy nagar": [13.0769, 80.2255, "GREEN", 34],
+      "anna nagar east": [13.0850, 80.2201, "GREEN", 35],
+      "anna nagar tower": [13.0847, 80.2114, "GREEN", 36],
+      "thirumangalam": [13.0856, 80.1996, "GREEN", 37],
+      "koyambedu": [13.0729, 80.1952, "GREEN", 38],
+      "cmbt": [13.0685, 80.2039, "GREEN", 39],
+      "puratchi thalaivi dr. j. jayalalithaa cmbt": [13.0685, 80.2039, "GREEN", 39],
+      "arumbakkam": [13.0628, 80.2114, "GREEN", 40],
+      "vadapalani": [13.0514, 80.2117, "GREEN", 41],
+      "ashok nagar": [13.0358, 80.2114, "GREEN", 42],
+      "ekkattuthangal": [13.0195, 80.2052, "GREEN", 43],
+      "st. thomas mount": [13.0062, 80.1983, "GREEN", 44]
+    };
+
+    let groupedStations = [];
+    let vehicle = "two";
+    let activeFilter = "ALL";
+    let anchorCoords = null; // Either GPS {lat, lon} or manually pinned station {lat, lon, label}
+    let anchorLabel = "Route Order";
+    let pinnedStations = Store.get("cmrl_pinned_stations", []);
+
+    function getMeta(name) {
+      const clean = name.toLowerCase().replace(/metro/g, "").trim();
+      if (STATION_META[clean]) return STATION_META[clean];
+      for (const [k, v] of Object.entries(STATION_META)) {
+        if (clean.includes(k) || k.includes(clean)) return v;
+      }
+      return [null, null, "OTHER", 99];
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+      return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
+    }
+
+    function setStatus(state, badgeText, subText) {
+      const badge = document.getElementById("liveBadge");
+      const text = document.getElementById("liveText");
+      const sub = document.getElementById("subStatus");
+      text.innerText = badgeText;
+      sub.innerText = subText;
+
+      if (state === "live") {
+        badge.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200";
+      } else if (state === "syncing") {
+        badge.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200";
+      } else {
+        badge.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200";
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById("errorMsg").innerText = msg;
+      document.getElementById("errorCard").classList.remove("hidden");
+    }
+
+    function requestGPS() {
+      const label = document.getElementById("gpsLabel");
+      if (window.location.protocol === "file:") {
+        showError("Mobile browsers block hardware GPS on local file:// pages. Host this file on GitHub Pages (HTTPS) to unlock real GPS, or tap 'Near Here' on any station card below.");
+        return;
+      }
+      if (!navigator.geolocation) {
+        showError("Geolocation is unavailable in this browser.");
+        return;
+      }
+      label.innerText = "Locating...";
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          anchorCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+          anchorLabel = "GPS Live";
+          label.innerText = "GPS On";
+          document.getElementById("gpsBtn").classList.add("bg-blue-50", "text-blue-700", "ring-1", "ring-blue-300");
+          render();
+        },
+        (err) => {
+          label.innerText = "Locate";
+          showError(`GPS Error (${err.code}): ${err.message}. Tip: Tap 'Set Origin' on any station card to sort from there.`);
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+      );
+    }
+
+    function setStationAnchor(stationName, lat, lon, e) {
+      e.stopPropagation();
+      if (!lat || !lon) return;
+      anchorCoords = { lat, lon };
+      anchorLabel = `From ${stationName.split(" ")[0]}`;
+      document.getElementById("gpsLabel").innerText = "Anchored";
+      render();
+    }
+
+    function setVehicle(v) {
+      vehicle = v;
+      const b = document.getElementById("dockBike");
+      const c = document.getElementById("dockCar");
+      if (v === "two") {
+        b.className = "py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 bg-white text-slate-900 shadow transition-all";
+        c.className = "py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-all";
+      } else {
+        c.className = "py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 bg-white text-slate-900 shadow transition-all";
+        b.className = "py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-all";
+      }
+      render();
+    }
+
+    function setFilter(f) {
+      activeFilter = f;
+      document.querySelectorAll(".filter-pill").forEach(btn => {
+        if (btn.dataset.filter === f) {
+          btn.className = "filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-900 text-white shrink-0 transition-all shadow-xs";
+        } else {
+          btn.className = "filter-pill px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-600 shrink-0 transition-all";
+        }
+      });
+      render();
+    }
+
+    function togglePin(stationName, e) {
+      e.stopPropagation();
+      if (pinnedStations.includes(stationName)) {
+        pinnedStations = pinnedStations.filter(s => s !== stationName);
+      } else {
+        pinnedStations.push(stationName);
+      }
+      Store.set("cmrl_pinned_stations", pinnedStations);
+      render();
+    }
+
+    function clearSearch() {
+      document.getElementById("searchBox").value = "";
+      render();
+    }
+
+    function pick(obj, keys, def = 0) {
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+        const match = Object.keys(obj).find(x => x.toLowerCase() === k.toLowerCase());
+        if (match && obj[match] !== undefined && obj[match] !== null) return obj[match];
+      }
+      return def;
+    }
+
+    function groupByStation(rawArray) {
+      const map = new Map();
+
+      rawArray.forEach(row => {
+        const rawName = String(pick(row, ["StationName", "stationName", "station"], "Unknown")).trim();
+        const station = rawName.replace(/\s*Metro\s*$/i, "").trim();
+        const area = String(pick(row, ["ParkingAreaName", "parkingAreaName", "areaName"], "Main Lot")).trim();
+
+        const twoCap = parseInt(pick(row, ["TwoWheelerCapacity"], 0)) || 0;
+        const twoFree = parseInt(pick(row, ["TwoWheelerAvailable"], 0)) || 0;
+        const fourCap = parseInt(pick(row, ["ThreeNFourWheelerCapacity", "FourWheelerCapacity"], 0)) || 0;
+        const fourFree = parseInt(pick(row, ["ThreeNFourWheelerAvailable", "FourWheelerAvailable"], 0)) || 0;
+        const diffTwo = parseInt(pick(row, ["HTwoWheelerAvailable"], 0)) || 0;
+        const diffFour = parseInt(pick(row, ["HFourWheelerAvailable"], 0)) || 0;
+
+        if (!map.has(station)) {
+          const [lat, lon, line, order] = getMeta(station);
+          map.set(station, {
+            station,
+            lat,
+            lon,
+            line,
+            order,
+            lots: [],
+            two: { cap: 0, free: 0, diff: 0 },
+            four: { cap: 0, free: 0, diff: 0 }
+          });
+        }
+
+        const entry = map.get(station);
+        entry.lots.push({ area, twoCap, twoFree, fourCap, fourFree });
+        entry.two.cap += twoCap;
+        entry.two.free += twoFree;
+        entry.two.diff += diffTwo;
+        entry.four.cap += fourCap;
+        entry.four.free += fourFree;
+        entry.four.diff += diffFour;
+      });
+
+      return Array.from(map.values());
+    }
+
+    async function loadData() {
+      const icon = document.getElementById("spinIcon");
+      icon.classList.add("animate-spin");
+      setStatus("syncing", "SYNCING", "Fetching live CMRL availability...");
+
+      try {
+        // Simple GET without custom headers to avoid iOS Safari CORS preflight rejections
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const list = Array.isArray(payload) ? payload : (payload.data || payload.result || Object.values(payload).find(Array.isArray) || []);
+
+        if (!list.length) throw new Error("Empty dataset returned");
+
+        groupedStations = groupByStation(list);
+        Store.set("cmrl_cached_stations", { ts: Date.now(), data: groupedStations });
+
+        const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        setStatus("live", "LIVE", `${list.length} lots across ${groupedStations.length} stations • ${timeStr}`);
+        render();
+      } catch (err) {
+        const cached = Store.get("cmrl_cached_stations", null);
+        if (cached && cached.data) {
+          groupedStations = cached.data;
+          const mins = Math.max(1, Math.round((Date.now() - cached.ts) / 60000));
+          setStatus("offline", "CACHED", `Showing saved data from ${mins}m ago`);
+          render();
+        } else {
+          setStatus("offline", "ERROR", "Unable to reach CMRL server");
+          showError(`Fetch error: ${err.message}. Check internet connection or if iOS content blocker is active.`);
+        }
+      } finally {
+        icon.classList.remove("animate-spin");
+      }
+    }
+
+    function findNearestAlternative(fullStation) {
+      if (!fullStation.lat || !fullStation.lon) return null;
+      let best = null;
+      let bestDist = Infinity;
+
+      groupedStations.forEach(cand => {
+        if (cand.station === fullStation.station || !cand.lat) return;
+        const d = cand[vehicle];
+        if (d.free >= 5) {
+          const dist = haversine(fullStation.lat, fullStation.lon, cand.lat, cand.lon);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = { station: cand.station, free: d.free, dist };
+          }
+        }
+      });
+      return best;
+    }
+
+    function render() {
+      const feed = document.getElementById("feed");
+      const q = (document.getElementById("searchBox").value || "").toLowerCase().trim();
+      document.getElementById("clearBtn").classList.toggle("hidden", !q);
+
+      let list = groupedStations.map(st => ({
+        ...st,
+        distance: (anchorCoords && st.lat) ? haversine(anchorCoords.lat, anchorCoords.lon, st.lat, st.lon) : null
+      }));
+
+      // Apply Filters
+      if (q) {
+        list = list.filter(st =>
+          st.station.toLowerCase().includes(q) ||
+          st.lots.some(l => l.area.toLowerCase().includes(q))
+        );
+      }
+      if (activeFilter === "OPEN") {
+        list = list.filter(st => st[vehicle].free > 0);
+      } else if (activeFilter === "BLUE") {
+        list = list.filter(st => st.line === "BLUE" || st.line === "INTERCHANGE");
+      } else if (activeFilter === "GREEN") {
+        list = list.filter(st => st.line === "GREEN" || st.line === "INTERCHANGE");
+      } else if (activeFilter === "PINNED") {
+        list = list.filter(st => pinnedStations.includes(st.station));
+      }
+
+      // Sort: Pinned -> Distance (if anchored) -> Geographic Route Order
+      list.sort((a, b) => {
+        const aPin = pinnedStations.includes(a.station);
+        const bPin = pinnedStations.includes(b.station);
+        if (aPin && !bPin) return -1;
+        if (!aPin && bPin) return 1;
+
+        if (a.distance !== null && b.distance !== null && a.distance !== b.distance) {
+          return a.distance - b.distance;
+        }
+        return a.order - b.order || a.station.localeCompare(b.station);
+      });
+
+      // Update Hero Metrics
+      if (groupedStations.length) {
+        document.getElementById("heroStats").classList.remove("hidden");
+        const openCount = list.filter(s => s[vehicle].free > 0).length;
+        const totalFree = list.reduce((acc, s) => acc + s[vehicle].free, 0);
+        document.getElementById("heroOpen").innerText = `${openCount}/${list.length}`;
+        document.getElementById("heroSlots").innerText = totalFree.toLocaleString();
+        document.getElementById("heroAnchor").innerText = anchorLabel;
+      }
+
+      if (!list.length) {
+        feed.innerHTML = `<div class="bg-white rounded-2xl p-8 text-center border border-slate-200/70 text-xs font-semibold text-slate-400">No stations match your filter.</div>`;
+        return;
+      }
+
+      feed.innerHTML = list.map(st => {
+        const stats = st[vehicle];
+        const hasParking = stats.cap > 0;
+        const pct = hasParking ? Math.round((stats.free / stats.cap) * 100) : 0;
+        const isPinned = pinnedStations.includes(st.station);
+
+        // Line indicator pill
+        let lineDot = "bg-slate-400";
+        if (st.line === "BLUE") lineDot = "bg-blue-600";
+        else if (st.line === "GREEN") lineDot = "bg-emerald-600";
+        else if (st.line === "INTERCHANGE") lineDot = "bg-purple-600";
+
+        // Availability theme
+        let countColor = "text-slate-900";
+        let barBg = "bg-emerald-500";
+        let pill = `<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-700">${pct}% FREE</span>`;
+
+        if (!hasParking) {
+          countColor = "text-slate-400";
+          barBg = "bg-slate-200";
+          pill = `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500">NO ${vehicle === 'two' ? 'BIKE' : 'CAR'} LOT</span>`;
+        } else if (stats.free === 0) {
+          countColor = "text-rose-600";
+          barBg = "bg-rose-500";
+          pill = `<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-50 text-rose-600">FULL</span>`;
+        } else if (pct <= 25) {
+          countColor = "text-amber-600";
+          barBg = "bg-amber-500";
+          pill = `<span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-50 text-amber-700">LOW • ${pct}%</span>`;
+        }
+
+        // Sub-lots breakdown pills (only when station has multiple lots or specific gate name)
+        const lotChips = st.lots.map(l => {
+          const f = vehicle === "two" ? l.twoFree : l.fourFree;
+          const c = vehicle === "two" ? l.twoCap : l.fourCap;
+          if (c === 0) return "";
+          const chipStyle = f === 0 ? "bg-rose-50 text-rose-600 border-rose-100" : "bg-slate-50 text-slate-700 border-slate-200/80";
+          return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${chipStyle}">
+            <span>${l.area}:</span><strong class="mono">${f}</strong>/${c}
+          </span>`;
+        }).filter(Boolean).join("");
+
+        // Smart redirect if full
+        const alt = (hasParking && stats.free === 0) ? findNearestAlternative(st) : null;
+        const navUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(st.station + " Metro Station Parking Chennai")}`;
+
+        return `
+          <article class="bg-white rounded-2xl p-4 border ${isPinned ? 'border-amber-300 ring-1 ring-amber-200/60' : 'border-slate-200/80'} shadow-2xs transition-all">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full ${lineDot} shrink-0"></span>
+                  <h2 class="text-sm font-extrabold text-slate-900 truncate">${st.station}</h2>
+                </div>
+                <div class="flex items-center gap-2 mt-1 text-[11px] font-semibold text-slate-500">
+                  ${st.distance !== null ? `<span class="text-blue-600 font-bold">${st.distance} km away</span><span>•</span>` : ''}
+                  <span>${st.lots.length} ${st.lots.length > 1 ? 'gates' : 'gate'}</span>
+                  ${st.lat ? `<button onclick="setStationAnchor('${st.station.replace(/'/g, "\\'")}', ${st.lat}, ${st.lon}, event)" class="text-slate-400 hover:text-blue-600 underline ml-1">Set Origin</button>` : ''}
+                </div>
+              </div>
+
+              <!-- Big Glanceable Counter -->
+              <div class="text-right shrink-0">
+                ${hasParking ? `
+                  <div class="mono text-xl font-extrabold leading-none ${countColor}">
+                    ${stats.free}<span class="text-xs font-semibold text-slate-400">/${stats.cap}</span>
+                  </div>
+                ` : `<div class="mono text-base font-bold text-slate-300">—</div>`}
+                <div class="mt-1">${pill}</div>
+              </div>
+            </div>
+
+            <!-- Occupancy Bar -->
+            ${hasParking ? `
+              <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-3">
+                <div class="${barBg} h-full rounded-full transition-all duration-500" style="width: ${stats.free > 0 ? Math.max(4, pct) : 0}%"></div>
+              </div>
+            ` : ''}
+
+            <!-- Gate Chips + Action Buttons -->
+            <div class="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-100">
+              <div class="flex flex-wrap gap-1.5 flex-1">
+                ${lotChips || `<span class="text-[11px] text-slate-400">No designated bays</span>`}
+              </div>
+
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="togglePin('${st.station.replace(/'/g, "\\'")}', event)" class="w-8 h-8 rounded-xl ${isPinned ? 'bg-amber-50 text-amber-500 border border-amber-200' : 'bg-slate-50 text-slate-400 border border-slate-200/70'} flex items-center justify-center text-xs font-bold active:scale-95 transition-all" title="Pin Station">
+                  ${isPinned ? '★' : '☆'}
+                </button>
+                <a href="${navUrl}" target="_blank" rel="noopener" class="h-8 px-2.5 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200/70 flex items-center gap-1 text-[11px] font-bold transition-all">
+                  <span>Go</span>
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7M7 7h10v10"/></svg>
+                </a>
+              </div>
+            </div>
+
+            <!-- Smart Detour Suggestion when Full -->
+            ${alt ? `
+              <div class="mt-2.5 px-3 py-2 rounded-xl bg-amber-50/90 border border-amber-200/80 flex items-center justify-between text-[11px]">
+                <span class="text-amber-900 font-semibold">
+                  Nearest open: <strong>${alt.station}</strong> (${alt.dist} km)
+                </span>
+                <span class="mono font-extrabold text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-amber-200">
+                  ${alt.free} free
+                </span>
+              </div>
+            ` : ''}
+          </article>
+        `;
+      }).join('');
+    }
+
+    // Boot
+    loadData();
+  </script>
+</body>
+</html>
